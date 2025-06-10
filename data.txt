@@ -1,0 +1,181 @@
+# import pandas
+from flask import Flask, render_template, request, redirect, url_for, flash
+from flask_wtf import FlaskForm
+from wtforms import StringField, PasswordField, EmailField, DateField, SelectField, SelectMultipleField, RadioField, IntegerField
+from wtforms.validators import DataRequired, Length, Regexp, ValidationError
+import os
+import openpyxl
+import csv
+import uuid
+
+app = Flask(__name__)
+app.secret_key = "your_secret_key"
+excel_file = "user_form.xlsx"
+csv_file = "user_data.csv"
+fields = ["UID", "Name", "Email", "Phone", "Password", "Country", "Hobbies", "Duration", "DOB", "Rating", "City", "State", "Zip Code"]
+
+def dob_before_2000(form, field):
+    if not field.data or str(field.data) > "2000-01-01":
+        raise ValidationError("under age")
+
+class UserForm(FlaskForm):
+    name = StringField('Name', validators=[DataRequired(), Length(min=2, message="Name is too short.")])
+    email = EmailField('Email')  
+    phone = StringField('Phone', validators=[DataRequired(), Regexp(r'^\d{10}$', message="must be 10 no.")])
+    password = PasswordField('Password')  
+    country = SelectField('Country', choices=[
+        ('India', 'India'), ('United States', 'United States'),
+        ('United Kingdom', 'United Kingdom'), ('Japan', 'Japan'), ('Australia', 'Australia')
+    ])
+    city = StringField('City')
+    state = StringField('State')
+    zip = StringField('Zip Code')
+    rating = IntegerField('Rating')
+    hobby = SelectMultipleField('Hobbies', choices=[('Cricket', 'Cricket'), ('Gaming', 'Gaming')])
+    duration = RadioField('Duration', choices=[('14 Days', '14 Days'), ('45 Days', '45 Days')])
+    DOB = DateField('DOB', validators=[DataRequired(), dob_before_2000], format='%Y-%m-%d')
+
+def read_excel_file(filename=excel_file):
+    if not os.path.exists(filename):
+        return []
+    workbook = openpyxl.load_workbook(filename)
+    sheet = workbook.active
+    data = []
+    for row in sheet.iter_rows(min_row=2, values_only=True):
+        if any(row):
+            data.append({field: row[i] if i < len(row) else "" for i, field in enumerate(fields)})
+    return data
+
+def write_excel_file(users, filename=excel_file):
+    workbook = openpyxl.Workbook()
+    sheet = workbook.active
+    sheet.append(fields)
+    for user in users:
+        sheet.append([user.get(field, "") for field in fields])
+    workbook.save(filename)
+
+def write_csv_file(users, filename=csv_file):
+    with open(filename, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.DictWriter(f, fieldnames=fields)
+        writer.writeheader()
+        for user in users:
+            writer.writerow(user)
+
+def find_user_index_by_id(users, user_id):
+    for idx, user in enumerate(users):
+        if user["UID"] == user_id:
+            return idx
+    return None
+
+def update_excel_row(row_index, new_row, filename=excel_file):
+    try:
+        book = openpyxl.load_workbook(filename)
+        sheet = book.active
+        for col, key in enumerate(fields, start=1):
+            sheet.cell(row=row_index, column=col, value=new_row.get(key, ""))
+        book.save(filename)
+    except Exception as e:
+        print(f"Error updating Excel: {e}")
+
+@app.route("/", methods=["GET", "POST"])
+def main():
+    form = UserForm()
+    users = read_excel_file()
+    if form.validate_on_submit():
+        user = {
+            "UID": str(uuid.uuid4()),
+            "Name": form.name.data,
+            "Email": form.email.data,
+            "Phone": "+91" + form.phone.data,
+            "Password": form.password.data,
+            "Country": form.country.data,
+            "Hobbies": ", ".join(form.hobby.data),
+            "Duration": form.duration.data,
+            "DOB": str(form.DOB.data),
+            "Rating": str(form.rating.data),
+            "City": form.city.data,
+            "State": form.state.data,
+            "Zip Code": form.zip.data,
+        }
+        users.append(user)
+        users.sort(key=lambda x: (x["Name"] or "").lower())
+        write_excel_file(users)
+        write_csv_file(users)
+        return redirect(url_for("table"))
+    return render_template("main.html", users=users, form=form)
+
+@app.route("/table")
+def table():
+    users = read_excel_file()
+    users.sort(key=lambda x: (x["Name"] or "").lower())
+    return render_template("table.html", users=users)
+
+
+@app.route("/edit/<user_id>", methods=["GET", "POST"])
+def edit_user(user_id):
+    users = read_excel_file()
+    index = find_user_index_by_id(users, user_id)
+    if index is None:
+        return "User not found", 404
+    user = users[index]
+    form = UserForm(data=user)
+    if form.validate_on_submit():
+        user["Name"] = form.name.data
+        user["Email"] = form.email.data
+        phone = form.phone.data
+        if not phone.startswith("+91"):
+            phone = "+91" + phone
+        user["Phone"] = phone
+        user["Password"] = form.password.data
+        user["Country"] = form.country.data
+        user["City"] = form.city.data
+        user["State"] = form.state.data
+        user["Zip Code"] = form.zip.data
+        user["Rating"] = form.rating.data
+        hobbies = form.hobby.data
+        user["Hobbies"] = ", ".join(hobbies)
+        user["Duration"] = form.duration.data
+        user["DOB"] = str(form.DOB.data)
+        users[index] = user
+        write_csv_file(users)
+        update_excel_row(index + 2, user)
+        return redirect(url_for("table"))
+    hobbies = []
+    if "Hobbies" in user and isinstance(user["Hobbies"], str):
+        hobbies = user["Hobbies"].split(", ")
+    user_for_form = {
+        "name": user.get("Name", ""),
+        "email": user.get("Email", ""),
+        "phone": user.get("Phone", "")[3:] if user.get("Phone", "").startswith("+91") else user.get("Phone", ""),
+        "password": user.get("Password", ""),
+        "country": user.get("Country", ""),
+        "city": user.get("City", ""),
+        "state": user.get("State", ""),
+        "zip": user.get("Zip Code", ""),
+        "rating": user.get("Rating", ""),
+        "hobby": hobbies,
+        "duration": user.get("Duration", ""),
+        "DOB": user.get("DOB", "")
+    }
+    return render_template("edit.html", user=user_for_form, index=index, form=form)
+
+@app.route("/delete/<user_id>")
+def delete_user(user_id):
+    users = read_excel_file()
+    index = find_user_index_by_id(users, user_id)
+    if index is None:
+        return "User not found", 404
+    users.pop(index)
+    if users:
+        users.sort(key=lambda x: (x["Name"] or "").lower())
+        write_csv_file(users)
+        write_excel_file(users)
+    else:
+        if os.path.exists(excel_file):
+            os.remove(excel_file)
+        if os.path.exists(csv_file):
+            os.remove(csv_file)
+    return redirect(url_for("table"))
+
+if __name__ == "__main__":
+    app.run(debug=True)

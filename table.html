@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Submitted Data Table</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .table-hover tbody tr:hover {
+            background-color: #343a40 !important;
+            transition: background 0.2s;
+        }
+        .uid-col {
+            max-width: 120px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .glass-card {
+            background: rgba(30, 30, 30, 0.55) !important;
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border-radius: 16px;
+            border: 1px solid rgba(255,255,255,0.18);
+        }
+        tr.selected-row {
+            background-color: #495057 !important;
+        }
+        @keyframes fadeInRow {
+            from { opacity: 0; transform: translateY(10px);}
+            to { opacity: 1; transform: translateY(0);}
+        }
+        tbody tr {
+            animation: fadeInRow 0.5s ease;
+        }
+    </style>
+</head>
+<body class="bg-dark text-white">
+    <div class="container mt-5">
+
+        <nav class="navbar navbar-expand-lg navbar-dark bg-secondary mb-4">
+            <div class="container-fluid d-flex justify-content-start">
+                <a href="{{ url_for('main') }}" class="btn btn-dark me-2">Home</a>
+            </div>
+        </nav>
+        <h2 class="text-center mb-4">Submitted Users</h2>
+        <div class="card glass-card text-white shadow-lg rounded">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-bordered table-striped table-dark table-hover">
+                        <thead class="table-dark" style="position: sticky; top: 0; z-index: 1;">
+                            <tr>
+                                <th>Name</th>
+                                <th>Email</th>
+                                <th>Phone</th>
+                                <th>Password</th>
+                                <th>Hobbies</th>
+                                <th>Duration</th>
+                                <th>Country</th>
+                                <th>City</th>
+                                <th>State</th>
+                                <th>Zip Code</th>
+                                <th>DOB</th>
+                                <th>Rating</th>
+                                <th class="uid-col">UID</th>
+                                <th>edit/delete</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for user in users %}
+                            <tr>
+                                <td>{{ user["Name"] }}</td>
+                                <td>{{ user["Email"] }}</td>
+                                <td>{{ user["Phone"] }}</td>
+                                <td>{{ user["Password"] }}</td>
+                                <td>
+                                    {% set hobbies = user["Hobbies"] if user["Hobbies"] is string else "" %}
+                                    {% for hobby in hobbies.split(", ") if hobbies %}
+                                        {{ hobby }}{% if not loop.last %}, {% endif %}
+                                    {% endfor %}
+                                </td>
+                                <td>{{ user["Duration"] }}</td>
+                                <td>{{ user["Country"] }}</td>
+                                <td>{{ user["City"] }}</td>
+                                <td>{{ user["State"] }}</td>
+                                <td>{{ user["Zip Code"] }}</td>
+                                <td>{{ user["DOB"] }}</td>
+                                <td>
+                                    <span class="badge {% if user['Rating']|int >= 8 %}bg-success{% elif user['Rating']|int >= 5 %}bg-warning{% else %}bg-danger{% endif %}">
+                                        {{ user["Rating"] }}
+                                    </span>
+                                </td>
+                                <td class="uid-col">{{ user["UID"] }}</td>
+                                <td>
+                                    <a href="{{ url_for('edit_user', user_id=user['UID']) }}" class="btn btn-sm btn-warning">Edit</a>
+                                    <a href="{{ url_for('delete_user', user_id=user['UID']) }}" class="btn btn-sm btn-danger">Delete</a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('tbody tr').forEach(function(row) {
+            row.addEventListener('click', function() {
+                document.querySelectorAll('tbody tr').forEach(r => r.classList.remove('selected-row'));
+                row.classList.add('selected-row');
+            });
+        });
+    });
+    </script>
+</body>
+</html>
